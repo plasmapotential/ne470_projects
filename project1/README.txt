@@ -1,4 +1,4 @@
-This is a README for Project 1
+## This is a README for Project 1
 
 To run the Project 1 modules follow these steps:
 1)  Save all files to common directory
@@ -44,3 +44,6 @@ To run the Project 1 modules follow these steps:
 
   If you use this alternative method, you will need to enter parameters for
   fortran file one by one, manually.
+
+Additionally, some sample plots are included in the "plots" directory.  They
+contains a myriad of geometries, mesh sizes, etc., in .png format
