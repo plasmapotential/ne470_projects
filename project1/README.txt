@@ -1,12 +1,3 @@
-#Description:   Solves 1D 1-group Neutron Diffusion Equation, given
-#               user input parameters, and outputs results to screen
-#               and CSV file, then plots data using GNUplot.
-
-School:         University Tennesse Knoxville
-Dept.:          Nuclear Engineering
-Course:         NE470
-
-
 This is a README for Project 1
 
 To run the Project 1 modules follow these steps:
