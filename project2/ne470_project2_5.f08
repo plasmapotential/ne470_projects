@@ -202,12 +202,13 @@ ALLOCATE(S_old(init_a), S_new(init_a))
 !===Create c value from geometry selection
 c = geom - 1
 S = (10**8)
+!S = 200000000
 S2 = (10**8)*S_mult
 !===Diffusion Coefficient Definition
 D = 1/(3*sigma_tr)
 
 !Tolerances For Loops
-tol1 = 0.01
+tol1 = 0.0001
 tol2 = 0.0001
 
 
@@ -225,7 +226,7 @@ newton = 1
 
 !+++++Newton Raphson Initial Conditions
 do while (1 .NE. 0)
-      
+
    
       !===Step Size
       do i=1,(meshN)
@@ -273,7 +274,7 @@ do while (1 .NE. 0)
       do j=2, (meshN - 3)
             mat_b(j) = sigma_f
       end do
-      mat_b(1) = 0
+      mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)
       mat_b(meshN - 2) = 0
       
       S_old = mat_B
@@ -316,10 +317,11 @@ do while (1 .NE. 0)
          !Multiplication Factor / Reactivity
          k_old = k
          k = (k_old*(sum(S_new))/(sum(S_old)))
-         !write(*,*) 'K_NEW: ', k
-         !write(*,*) ' ' 
+         write(*,*) 'K_NEW: ', k
+         write(*,*) ' ' 
          
-         if (abs((k - k_old)/k_old) <= tol1) then  
+         if ( abs((k - k_old)/k_old) <= tol1 ) then  
+         !if (k >= 0 .AND. abs(log(k/k_old)) <=tol1) then
          !if (abs((k - k_old)/k_old) <= tol1 .AND. abs((S_new(meshN - 3) - (S_old(meshN-3))/S_new(meshN-2))) <= tol1) then
          !   write(*,*) 'FOUND A K!', k
             exit
@@ -328,10 +330,10 @@ do while (1 .NE. 0)
       
          !Save this S value
          S_old = S_new
-       
+         
          !Create New RHS Source Term: S(n+1)/k(n+1)
          mat_B = S_new/k
-         mat_b(1) = 0
+         mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)
          mat_b(meshN - 2) = 0
          counter = counter + 1
          !write(*,*) 'INSIDE k = ', k
@@ -351,19 +353,23 @@ do while (1 .NE. 0)
       
       if (newton == 1) then
          write(*,*) 'W_1: ', W
-         w_old = W
+         w_new = W
          k2 = k
-         W = W + W/(100*ind)
+         W = W*1.1
          newton = 2
       else 
          k1 = k2
          k2 = k
-         react_new = (k2-1)/k2
-         react_old = (k1-1)/k1
-         d_ro = (react_new-react_old)/(W - w_old)
-         w_old = W
-         W = w_old - (react_new/d_ro)
-         newton = 1
+         react_new = log(k2)
+         react_old = log(k1)
+         !d_ro = (react_new - react_old)/(w_new - w_old)
+         !w_old = W
+         
+         w_old = w_new
+         w_new = W
+         !W = w_old - (log(k2)/d_ro)
+         W = (w_old*react_new - w_new*react_old)/(react_new - react_old)
+         
       end if
 
    
@@ -371,9 +377,9 @@ do while (1 .NE. 0)
    write(*,*) 'K2 = ', k2
    write(*,*) 'react_old = ', react_old 
    write(*,*) 'react_new = ', react_new
-   write(*,*) 'd_ro = !', d_ro
+   !write(*,*) 'd_ro = !', d_ro
    write(*,*) 'w_old = ', w_old
-   write(*,*) 'w_new = ', W
+   write(*,*) 'w_new = ', w_new
 
 
    ind = ind + 1
