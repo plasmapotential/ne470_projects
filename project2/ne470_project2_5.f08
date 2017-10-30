@@ -208,7 +208,7 @@ S2 = (10**8)*S_mult
 D = 1/(3*sigma_tr)
 
 !Tolerances For Loops
-tol1 = 0.0001
+tol1 = 0.001
 tol2 = 0.0001
 
 
@@ -274,8 +274,8 @@ do while (1 .NE. 0)
       do j=2, (meshN - 3)
             mat_b(j) = sigma_f
       end do
-      mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)
-      mat_b(meshN - 2) = 0
+      mat_b(1) = (((D)/(del_x**2)) + sigma_a)*1/(c+1)
+      mat_b(meshN - 2) =(((2*D)/(del_x**2)) + sigma_a)
       
       S_old = mat_B
       S_new = 0
@@ -310,7 +310,7 @@ do while (1 .NE. 0)
          if (info /= 0) stop 'Solution of the linear system failed!'
          
          !now we convert mat_B to S(n+1)
-         S_new = (mat_B*sigma_f) 
+         S_new = abs(mat_B*sigma_f) 
          !write(*,*) 'S_NEW: ', S_new
          !write(*,*) ' '   
             
@@ -333,8 +333,8 @@ do while (1 .NE. 0)
          
          !Create New RHS Source Term: S(n+1)/k(n+1)
          mat_B = S_new/k
-         mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)
-         mat_b(meshN - 2) = 0
+         mat_b(1) =  (((D)/(del_x**2)) + sigma_a)*1/(c+1)
+         mat_b(meshN - 2) = (((2*D)/(del_x**2)) + sigma_a)
          counter = counter + 1
          !write(*,*) 'INSIDE k = ', k
       end do
