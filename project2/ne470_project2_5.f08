@@ -208,7 +208,7 @@ S2 = (10**8)*S_mult
 D = 1/(3*sigma_tr)
 
 !Tolerances For Loops
-tol1 = 0.001
+tol1 = 0.0001
 tol2 = 0.0001
 
 
@@ -274,6 +274,7 @@ do while (1 .NE. 0)
       do j=2, (meshN - 3)
             mat_b(j) = sigma_f
       end do
+     
       mat_b(1) = (((D)/(del_x**2)) + sigma_a)*1/(c+1)
       mat_b(meshN - 2) =(((2*D)/(del_x**2)) + sigma_a)
       
@@ -317,8 +318,8 @@ do while (1 .NE. 0)
          !Multiplication Factor / Reactivity
          k_old = k
          k = (k_old*(sum(S_new))/(sum(S_old)))
-         write(*,*) 'K_NEW: ', k
-         write(*,*) ' ' 
+         !write(*,*) 'K_NEW: ', k
+         !write(*,*) ' ' 
          
          if ( abs((k - k_old)/k_old) <= tol1 ) then  
          !if (k >= 0 .AND. abs(log(k/k_old)) <=tol1) then
@@ -357,6 +358,8 @@ do while (1 .NE. 0)
          k2 = k
          W = W*1.1
          newton = 2
+         write(*,*) 'K1 = ', k
+         write(*,*) ' '
       else 
          k1 = k2
          k2 = k
@@ -373,13 +376,13 @@ do while (1 .NE. 0)
       end if
 
    
-   write(*,*) 'K1 = ', k
-   write(*,*) 'K2 = ', k2
-   write(*,*) 'react_old = ', react_old 
-   write(*,*) 'react_new = ', react_new
+   !write(*,*) 'K1 = ', k
+   !write(*,*) 'K2 = ', k2
+   !write(*,*) 'react_old = ', react_old 
+   !write(*,*) 'react_new = ', react_new
    !write(*,*) 'd_ro = !', d_ro
-   write(*,*) 'w_old = ', w_old
-   write(*,*) 'w_new = ', w_new
+   !write(*,*) 'w_old = ', w_old
+   !write(*,*) 'w_new = ', w_new
 
 
    ind = ind + 1
