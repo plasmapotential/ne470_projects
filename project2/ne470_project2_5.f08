@@ -178,6 +178,8 @@ do
   endif
   write(*,*) 'Please enter a string (ie test.csv).  Try Again...'
   write(*,*) ' '
+  write(*,*) ' '
+  write(*,*) ' '
 enddo
 
 INQUIRE(File=outfile, Exist=exists)
@@ -190,6 +192,7 @@ END IF
 write(*,*) ' '
 
 !===Initialize dynamic arrays based upon received user input
+!meshN = 130
 init_a = meshN - 2
 ALLOCATE(mat_A(init_a,init_a), A_inv(init_a,init_a))
 ALLOCATE(mat_B(init_a), AinvB(init_a))
@@ -223,26 +226,21 @@ newton = 1
 !=======================================================================
 !           Numerical Solution             
 !=======================================================================
-
-!+++++Newton Raphson Initial Conditions
 do while (1 .NE. 0)
 
    
-      !===Step Size
-      do i=1,(meshN)
-         x(i) = (i-1)*W/(meshN-1)
-      end do
-      del_x = x(2) - x(1)
-      
-      !===Initial Conditions
-      !F(1) = S+(-(F(1)/(2*D*del_x)))
-      !F(meshN) = S2+((-F(meshN)/(2*D*del_x)))
-      
-      
+!      !===Step Size
+!      do i=1,(meshN)
+!         x(i) = (i-1)*W/(meshN-1)
+!         !x(i) = i-1
+!      end do
+!      del_x = x(2) - x(1)
+      del_x = W/(meshN-1)
+
       !=====Destruction Operator (A Matrix)
       do i=1, (meshN - 2)
          ! Account for X vector index offset
-         del_x = x(i+1) - x(i)
+         !del_x = x(i+1) - x(i)
          do j=1,(meshN - 2)
       
             IF (j == i) THEN
@@ -267,16 +265,17 @@ do while (1 .NE. 0)
          end do
       end do
       !write(*,*) 'A: ', mat_A
-      write(*,*) ' '
+      !write(*,*) ' '
       !==========Initial Guesses
       
         
       do j=2, (meshN - 3)
             mat_b(j) = sigma_f
       end do
-     
-      mat_b(1) = (((D)/(del_x**2)) + sigma_a)*1/(c+1)
-      mat_b(meshN - 2) =(((2*D)/(del_x**2)) + sigma_a)
+      
+      mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)*1/(c+1)
+      !mat_b(meshN - 2) =sigma_f*(((2*D)/(del_x**2)) + sigma_a)
+      mat_b(meshN - 2) = (((D)/(del_x**2)) + sigma_a + (D/(del_x**2))*(c/(2*meshN - 1)))
       
       S_old = mat_B
       S_new = 0
@@ -297,6 +296,7 @@ do while (1 .NE. 0)
          
          !====LAPACK STUFF
          n = size(mat_A,1)
+
          ! DGETRF computes an LU factorization of a general M-by-N matrix A
          ! using partial pivoting with row interchanges.
          ! See: http://www.netlib.org/lapack/explore-html/d3/d6a/dgetrf_8f.html
@@ -311,7 +311,7 @@ do while (1 .NE. 0)
          if (info /= 0) stop 'Solution of the linear system failed!'
          
          !now we convert mat_B to S(n+1)
-         S_new = abs(mat_B*sigma_f) 
+         S_new = (mat_B*sigma_f)
          !write(*,*) 'S_NEW: ', S_new
          !write(*,*) ' '   
             
@@ -333,9 +333,11 @@ do while (1 .NE. 0)
          S_old = S_new
          
          !Create New RHS Source Term: S(n+1)/k(n+1)
-         mat_B = S_new/k
-         mat_b(1) =  (((D)/(del_x**2)) + sigma_a)*1/(c+1)
-         mat_b(meshN - 2) = (((2*D)/(del_x**2)) + sigma_a)
+         mat_b = (del_x*S_new/k)
+         mat_b(1) =  sigma_f/del_x*(((D)/(del_x**2)) + sigma_a)*1/(c+1)
+         !mat_b(meshN - 2) = sigma_f*(((2*D)/(del_x**2)) + sigma_a)
+         mat_b(meshN - 2) = (((D)/(del_x**2)) + sigma_a + (D/(del_x**2))*(c/(2*meshN - 1)))
+         
          counter = counter + 1
          !write(*,*) 'INSIDE k = ', k
       end do
@@ -344,22 +346,26 @@ do while (1 .NE. 0)
 
    IF (k >= (1-tol2) .AND. k <= (1+tol2)) THEN
       write(*,*) 'FOUND SOLUTION!'
-      write(*,*) 'Outer Loop Iterations = ', ind
-      !write(*,*) 'W = ', W
-      !write(*,*) 'k = ', k
-      write(*,*) 'Inner Loop Iterations = ', counter
       exit
    END IF 
     
-      
+   !Set up Newton Raphson Derivative in this conditional
       if (newton == 1) then
-         write(*,*) 'W_1: ', W
+         write(*,*) ' '
+         write(*,*) ' '
+         write(*,*) '========== PROJECT 2 STEP 5 ================='
+         write(*,*) 'Original Width Guess [cm]: ', W
          w_new = W
          k2 = k
-         W = W*1.1
+         W = W*1.01
          newton = 2
-         write(*,*) 'K1 = ', k
+         write(*,*) 'Multiplication Factor for Original Width Guess (k) = ', k
          write(*,*) ' '
+         write(*,*) ' '
+         write(*,*) ' '
+         write(*,*) ' '
+         write(*,*) '............Searching for Critical Width........'
+         print *, ' '
       else 
          k1 = k2
          k2 = k
@@ -371,7 +377,7 @@ do while (1 .NE. 0)
          w_old = w_new
          w_new = W
          !W = w_old - (log(k2)/d_ro)
-         W = (w_old*react_new - w_new*react_old)/(react_new - react_old)
+         W = ((w_old*react_new - w_new*react_old)/(react_new - react_old))
          
       end if
 
@@ -383,17 +389,13 @@ do while (1 .NE. 0)
    !write(*,*) 'd_ro = !', d_ro
    !write(*,*) 'w_old = ', w_old
    !write(*,*) 'w_new = ', w_new
+   !write(*,*) 'del_x = ', del_X
 
 
    ind = ind + 1
    
          
 end do
-
-
-
-
-
 
 
 !=======================================================================
@@ -403,15 +405,20 @@ end do
 print *,' '
 print *,' '
 print *,'=============================================================='
-print *,'                      Results'
+print *,'             Project 2 Final Results'
 print *,'=============================================================='
 print *,' '
 
 print *,'Diffusion Coef.:', D
-write(*,*) 'Multiplication Factor (k) = ', k
+print *, ' '
 write(*,*) 'Inner Loop Tolerance = ', tol1
 write(*,*) 'Outer Loop Tolerance = ', tol2
-write(*,*) 'Critical Width [cm] = ', W
+print *, ' '
+write(*,*) 'Outer Loop Iterations = ', ind
+write(*,*) 'Inner Loop Iterations = ', counter
+print *, ' '
+write(*,*) 'Final Multiplication Factor (k) = ', k
+write(*,*) 'Critical Width [m] = ', W/(meshN)
 print *, ' '
 
 
