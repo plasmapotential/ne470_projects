@@ -9,6 +9,7 @@
 !            MAIN PROGRAM
 !=======================================================================
 program ne470_project2
+use iso_fortran_env
 implicit none
 
 !=======================================================================
@@ -17,17 +18,17 @@ implicit none
 
 integer :: i, j, ierror, meshN, geom, init_a, n, info, ind, newton, counter
 integer, parameter :: dp = selected_real_kind(15, 307)
-real(dp) :: del_x, S, S_mult, D, sigma_tr, sigma_a, c, S2, sqr, W
-real(dp) :: sigma_f, k, k_old, tol1, tol2, w_new, w_old, w_dot, k1, k2
-real(dp) :: react_new, react_old, d_ro
+real(real64) :: del_x, S, S_mult, D, sigma_tr, sigma_a, c, S2, sqr, W
+real(real64) :: sigma_f, k, k_old, tol1, tol2, w_new, w_old, w_dot, k1, k2
+real(real64) :: react_new, react_old, d_ro, leftnode, rightnode
 
 !=== Initialize arrays based upon user input
-real(dp), ALLOCATABLE :: mat_A(:,:), A_inv(:,:)
-real(dp), ALLOCATABLE :: mat_B(:), AinvB(:), S_old(:), S_new(:)
-real(dp), ALLOCATABLE :: F(:), F_an(:), F_num(:), x(:), work(:)
+real(real64), ALLOCATABLE :: mat_A(:,:), A_inv(:,:), sigma_mat(:,:), ipiv(:)
+real(real64), ALLOCATABLE :: mat_B(:), AinvB(:), S_old(:), S_new(:)
+real(real64), ALLOCATABLE :: F(:), F_an(:), F_num(:), x(:), work(:)
 
 
-integer, ALLOCATABLE :: ipiv(:)
+
 logical :: exists
 character(len=200) :: outfile, dummy
 
@@ -194,7 +195,7 @@ write(*,*) ' '
 !===Initialize dynamic arrays based upon received user input
 !meshN = 130
 init_a = meshN - 2
-ALLOCATE(mat_A(init_a,init_a), A_inv(init_a,init_a))
+ALLOCATE(mat_A(init_a,init_a), A_inv(init_a,init_a), sigma_mat(init_a,init_a))
 ALLOCATE(mat_B(init_a), AinvB(init_a))
 ALLOCATE(F(meshN), F_an(meshN), F_num(meshN), x(meshN))
 ALLOCATE(work(init_a), ipiv(init_a))
@@ -204,145 +205,179 @@ ALLOCATE(S_old(init_a), S_new(init_a))
 !=======================================================================
 !===Create c value from geometry selection
 c = geom - 1
-S = (10**8)
-!S = 200000000
-S2 = (10**8)*S_mult
+
 !===Diffusion Coefficient Definition
 D = 1/(3*sigma_tr)
 
 !Tolerances For Loops
-tol1 = 0.0001
-tol2 = 0.0001
+tol1 = 0.00001
+tol2 = 0.00001
 
 
+!===Counters and the like
 counter = 0
+ind = 1
+newton = 1
+j=1
+i=1
+
+!===Multiplication Factors
 k = 1
 k1 = 1
 k_old = 0
-ind = 1
+
+!===Widths
 w_old = W
-newton = 1
+
+!===Boundary Nodes
+leftnode = sigma_f/2
+!leftnode = sigma_f*(((2*D)/(del_x**2)) + sigma_a)
+rightnode = 1
+!rightnode = (((D)/(del_x**2)) + sigma_a + (D/(del_x**2))*(c/(2*meshN - 1)))
+
+
+!===Sources
+S = (10**8)
+S2 = S*S_mult
+do i=1,(meshN-2)
+   IF (i==j) THEN
+      sigma_mat(i,j) = sigma_f
+   ELSE
+      sigma_mat(i,j) = 0
+   END IF
+end do
+sigma_mat(1,1) = sigma_f/2
+
 
 !=======================================================================
 !           Numerical Solution             
 !=======================================================================
+
+!===OUTER LOOP - FIND W
 do while (1 .NE. 0)
+   !===Step Size
+!   do i=1,(meshN)
+!      x(i) = (i-1)*W/(meshN-1)
+!      !x(i) = i-1
+!   end do
+!   del_x = x(2) - x(1)
+   del_x = W/(meshN-1)
 
+   !=====Destruction Operator (A Matrix)
+   do i=1, (meshN - 2)
+      ! Account for X vector index offset
+      !del_x = x(i+1) - x(i)
+      do j=1,(meshN - 2)
    
-!      !===Step Size
-!      do i=1,(meshN)
-!         x(i) = (i-1)*W/(meshN-1)
-!         !x(i) = i-1
+         IF (j == i) THEN
+            mat_A(i,j) = (((2*D)/(del_x**2)) + sigma_a)
+   
+         ELSE IF (j == i+1) THEN
+            mat_A(i,j) = (((-D)/(del_x**2))*(1 + c/(2*i - 1)))
+                     
+         ELSE IF (j == i-1) THEN
+            mat_A(i,j) = (((-D)/(del_x**2))*(1 - c/(2*i - 1)))
+                     
+         ELSE
+            mat_A(i,j) = 0
+   
+         END IF
+   
+      end do
+   end do
+   !===Matrix A Left Boundary Condition
+   mat_A(1,1) = mat_A(1,1)/2
+   !write(*,*) 'A: ', mat_A
+   !write(*,*) ' '
+   
+   !===Initial Guesses
+   
+   !Guess Flux = 1  
+   do j=1, (meshN - 2)
+         mat_b(j) = 1
+   end do
+   
+   !Guess Critical Reactor
+   k = 1
+   k_old = 1
+   
+   !Compute S From Guesses
+   S_old = (1/k)*(matmul(sigma_mat,mat_B))
+   S_new = 0
+
+   !===INNER LOOP - FIND K
+   do while(1 .NE. 0)
+      !====LAPACK STUFF
+      n = size(mat_A,1)
+
+      ! DGETRF computes an LU factorization of a general M-by-N matrix A
+      ! using partial pivoting with row interchanges.
+      ! See: http://www.netlib.org/lapack/explore-html/d3/d6a/dgetrf_8f.html
+      call DGETRF(n, n, mat_A, n, ipiv, info)
+      if (info /= 0) stop 'Matrix is numerically singular!'
+      
+      ! DGETRS - solve a system of linear equations A * X = B or 
+      ! A' * X = B with a general N-by-N matrix A using the LU 
+      ! factorization computed by DGETRF. 
+      ! See: http://www.netlib.org/lapack/explore-html/d6/d49/dgetrs_8f.html
+      call DGETRS('N', n, 1, mat_A, n, ipiv, mat_B, n, info)  
+      if (info /= 0) stop 'Solution of the linear system failed!'
+      mat_b = mat_b/real(N,real64)
+      
+      
+      !now we convert mat_B to S(n+1)
+      S_new = matmul(sigma_mat,mat_B)
+      !write(*,*) 'S_NEW: ', S_new
+      !write(*,*) ' '   
+         
+      !Multiplication Factor / Reactivity
+      k_old = k
+      k = (k_old*(sum(S_new))/(sum(S_old)))
+      write(*,*) 'K_NEW: ', k
+      !write(*,*) ' ' 
+      
+      !Exit Tolerance Condition
+      if ( abs((k - k_old)/k_old) <= tol1 ) then  
+      !   write(*,*) 'FOUND A K!', k
+         exit
+      end if
+   
+      !Save this S value
+      S_old = S_new
+      
+      !Create New RHS Source Term: S(n+1)/k(n+1)
+      mat_b = (S_new/k)
+      
+      
+!      if (counter == 0) then
+!         print *, 'K 0 :', k
+!         print *, 'S 0 :', S
+!         print *, 'FLUX 0 :', flux
+      
+!      else if (counter == 1) then
+!         print *, 'K 1 :', k
+!         print *, 'S 1 :', S
+!         print *, 'FLUX 1 :', flux
+!         read *,n 
+!      end if
+  
+      
+!      flx_dif = 0
+!      do i=1,n
+!         flx_dif = (flx_dif + (flux(i) - flux_old(i))**2)
 !      end do
-!      del_x = x(2) - x(1)
-      del_x = W/(meshN-1)
+!      flx_dif = sqrt(flx_dif)
 
-      !=====Destruction Operator (A Matrix)
-      do i=1, (meshN - 2)
-         ! Account for X vector index offset
-         !del_x = x(i+1) - x(i)
-         do j=1,(meshN - 2)
-      
-            IF (j == i) THEN
-               mat_A(i,j) = (((2*D)/(del_x**2)) + sigma_a)
-      
-            ELSE IF (j == i+1) THEN
-               mat_A(i,j) = (((-D)/(del_x**2))*(1 + c/(2*i - 1)))
-                        
-            ELSE IF (j == i-1) THEN
-               mat_A(i,j) = (((-D)/(del_x**2))*(1 - c/(2*i - 1)))
-               ! Test Stuff
-               !print *,'i:', i
-               !print *,'i - 1 value:', mat_A(i,j)
-               !print *,'C Part:', c/(2*i - 1)
-               !print *,'c:', c
-                        
-            ELSE
-               mat_A(i,j) = 0
-      
-            END IF
-      
-         end do
-      end do
-      !write(*,*) 'A: ', mat_A
-      !write(*,*) ' '
-      !==========Initial Guesses
-      
-        
-      do j=2, (meshN - 3)
-            mat_b(j) = sigma_f
-      end do
-      
-      mat_b(1) = sigma_f*(((D)/(del_x**2)) + sigma_a)*1/(c+1)
-      !mat_b(meshN - 2) =sigma_f*(((2*D)/(del_x**2)) + sigma_a)
-      mat_b(meshN - 2) = (((D)/(del_x**2)) + sigma_a + (D/(del_x**2))*(c/(2*meshN - 1)))
-      
-      S_old = mat_B
-      S_new = 0
-      k = 1
-      k_old = 1
-      !write(*,*) 'B: ', mat_B
-   
-      
-      !do while((k - k_old)/k <= tol1 .AND. (S_new(meshN - 3) - (S_old(meshN-3))/S_new(meshN-2)) <= tol1)
-       do while(1 .NE. 0)
-         !At beginning of loop, mat_B = S(n)
-         !After LAPACK, mat_B = Flux
-         !Then mat_B is multiplied by sigma_f and k^-1
-         !This Yields S(n+1)
-         !Doing it this way conserves memory
-         
-         !print *,'B:', mat_B
-         
-         !====LAPACK STUFF
-         n = size(mat_A,1)
-
-         ! DGETRF computes an LU factorization of a general M-by-N matrix A
-         ! using partial pivoting with row interchanges.
-         ! See: http://www.netlib.org/lapack/explore-html/d3/d6a/dgetrf_8f.html
-         call DGETRF(n, n, mat_A, n, ipiv, info)
-         if (info /= 0) stop 'Matrix is numerically singular!'
-         
-         ! DGETRS - solve a system of linear equations A * X = B or 
-         ! A' * X = B with a general N-by-N matrix A using the LU 
-         ! factorization computed by DGETRF. 
-         ! See: http://www.netlib.org/lapack/explore-html/d6/d49/dgetrs_8f.html
-         call DGETRS('N', n, 1, mat_A, n, ipiv, mat_B, n, info)  
-         if (info /= 0) stop 'Solution of the linear system failed!'
-         
-         !now we convert mat_B to S(n+1)
-         S_new = (mat_B*sigma_f)
-         !write(*,*) 'S_NEW: ', S_new
-         !write(*,*) ' '   
-            
-         !Multiplication Factor / Reactivity
-         k_old = k
-         k = (k_old*(sum(S_new))/(sum(S_old)))
-         !write(*,*) 'K_NEW: ', k
-         !write(*,*) ' ' 
-         
-         if ( abs((k - k_old)/k_old) <= tol1 ) then  
-         !if (k >= 0 .AND. abs(log(k/k_old)) <=tol1) then
-         !if (abs((k - k_old)/k_old) <= tol1 .AND. abs((S_new(meshN - 3) - (S_old(meshN-3))/S_new(meshN-2))) <= tol1) then
-         !   write(*,*) 'FOUND A K!', k
-            exit
-         end if
-      
-      
-         !Save this S value
-         S_old = S_new
-         
-         !Create New RHS Source Term: S(n+1)/k(n+1)
-         mat_b = (del_x*S_new/k)
-         mat_b(1) =  sigma_f/del_x*(((D)/(del_x**2)) + sigma_a)*1/(c+1)
-         !mat_b(meshN - 2) = sigma_f*(((2*D)/(del_x**2)) + sigma_a)
-         mat_b(meshN - 2) = (((D)/(del_x**2)) + sigma_a + (D/(del_x**2))*(c/(2*meshN - 1)))
-         
-         counter = counter + 1
-         !write(*,*) 'INSIDE k = ', k
-      end do
-         !write(*,*) 'OUT OF INNER LOOP!'
-    
+!      if (flx_dif < tol1) then 
+!         print *, 'BREAK'
+!         exit
+!      end if     
+     
+      counter = counter + 1
+      !write(*,*) 'INSIDE k = ', k
+   end do
+      !write(*,*) 'OUT OF INNER LOOP!'
+ 
 
    IF (k >= (1-tol2) .AND. k <= (1+tol2)) THEN
       write(*,*) 'FOUND SOLUTION!'
@@ -350,36 +385,37 @@ do while (1 .NE. 0)
    END IF 
     
    !Set up Newton Raphson Derivative in this conditional
-      if (newton == 1) then
-         write(*,*) ' '
-         write(*,*) ' '
-         write(*,*) '========== PROJECT 2 STEP 5 ================='
-         write(*,*) 'Original Width Guess [cm]: ', W
-         w_new = W
-         k2 = k
-         W = W*1.01
-         newton = 2
-         write(*,*) 'Multiplication Factor for Original Width Guess (k) = ', k
-         write(*,*) ' '
-         write(*,*) ' '
-         write(*,*) ' '
-         write(*,*) ' '
-         write(*,*) '............Searching for Critical Width........'
-         print *, ' '
-      else 
-         k1 = k2
-         k2 = k
-         react_new = log(k2)
-         react_old = log(k1)
-         !d_ro = (react_new - react_old)/(w_new - w_old)
-         !w_old = W
-         
-         w_old = w_new
-         w_new = W
-         !W = w_old - (log(k2)/d_ro)
-         W = ((w_old*react_new - w_new*react_old)/(react_new - react_old))
-         
-      end if
+   if (newton == 1) then
+      write(*,*) ' '
+      write(*,*) ' '
+      write(*,*) '========== PROJECT 2 STEP 5 ================='
+      write(*,*) 'Original Width Guess [cm]: ', W
+      w_new = W
+      k2 = k
+      W = W*1.01
+      newton = 2
+      write(*,*) 'Multiplication Factor for Original Width Guess (k) = ', k
+      write(*,*) ' '
+      write(*,*) ' '
+      write(*,*) ' '
+      write(*,*) ' '
+      write(*,*) '............Searching for Critical Width........'
+      print *, ' '
+   else 
+      k1 = k2
+      k2 = k
+      
+      react_new = log(k2)
+      react_old = log(k1)
+      !d_ro = (react_new - react_old)/(w_new - w_old)
+      !w_old = W
+      
+      w_old = w_new
+      w_new = W
+      !W = w_old - (log(k2)/d_ro)
+      W = ((w_old*react_new - w_new*react_old)/(react_new - react_old))
+      
+   end if
 
    
    !write(*,*) 'K1 = ', k
@@ -418,7 +454,7 @@ write(*,*) 'Outer Loop Iterations = ', ind
 write(*,*) 'Inner Loop Iterations = ', counter
 print *, ' '
 write(*,*) 'Final Multiplication Factor (k) = ', k
-write(*,*) 'Critical Width [m] = ', W/(meshN)
+write(*,*) 'Critical Width [m] = ', W
 print *, ' '
 
 

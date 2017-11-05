@@ -1,8 +1,11 @@
-EXECUTABLE=ne470_project2_5.exe
-SOURCES=ne470_project2_5.f08
+EXECUTABLE=ne470_project2_7.exe
+SOURCES=ne470_project2_7.f08
 
-OBJECTS=$(SOURCES:.f90=.o)
-LDFLAGS=-llapack
+#EXECUTABLE=tester_lapack.exe
+#SOURCES=tester_lapack.f08
+
+OBJECTS=$(SOURCES:.f08=.o)
+LDFLAGS=-llapack -lblas
 
 FC=gfortran
 #CFLAGS=-g -fcheck=all -ftrapv -ffpe-trap=overflow,invalid -Wall -Wextra
@@ -13,7 +16,7 @@ all: $(SOURCES) $(EXECUTABLE)
 $(EXECUTABLE): $(OBJECTS) 
 	$(FC) $(OBJECTS) $(CFLAGS) $(LDFLAGS) -o $@
 
-%.o: %.f90
+%.o: %.f08
 	$(FC) -c $(CFLAGS) $< -o $@
 
 clean:
