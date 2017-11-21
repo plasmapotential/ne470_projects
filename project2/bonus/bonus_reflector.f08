@@ -16,10 +16,12 @@ implicit none
 !            Variables
 !=======================================================================
 
-integer :: i, j, ind, counter, newton, n, init_a, info
-real(real64) :: del_x, D, sigma_tr, sigma_a, W, test
+integer :: i, j, ind, counter, newton, n, init_a, info, nmod
+real(real64) :: del_x, D_mult, sigma_tr, sigma_a, W, test
 real(real64) :: sigma_f, k, k_old, tol1, tol2, w_new, w_old, k1, k2
 real(real64) :: react_new, react_old, k_orig, w_orig
+real(real64) :: W_m, w_old_m, w_new_m, w_orig_m, del_x_m
+real(real64) :: cross1, cross2, D_mod, sigma_a_m, sigma_f_m, sigma_tr_m
 
 integer, ALLOCATABLE :: ipiv(:)
 
@@ -27,17 +29,19 @@ integer, ALLOCATABLE :: ipiv(:)
 real(real64), ALLOCATABLE :: mat_A(:,:), sigma_mat(:,:), flux(:), S(:), Ainv(:,:)
 real(real64), ALLOCATABLE :: mat_B(:), S_old(:), S_new(:), flux_old(:), work(:)
 real(real64), ALLOCATABLE :: x_step(:)
-!real(real64), ALLOCATABLE :: ipiv(:)
+character(len=200) :: outfile
 
 external DGETRF, DGETRS
 
-print *,"How many mesh Nodes? "
+print *,"How many Multiplying Nodes? "
 read *,n
 
+print *,"How many Moderator Nodes? "
+read *,nmod
 
 
 !===Initialize dynamic arrays based upon received user input
-init_a = n
+init_a = n + nmod
 ALLOCATE(mat_A(init_a,init_a), sigma_mat(init_a,init_a))
 ALLOCATE(mat_B(init_a), flux(init_a), flux_old(init_a))
 ALLOCATE(ipiv(init_a), work(init_a), Ainv(init_a, init_a))
@@ -45,18 +49,24 @@ ALLOCATE(S_old(init_a), S_new(init_a), S(init_a), x_step(init_a))
 !=======================================================================
 !            Literals and Initial Conditions
 !=======================================================================
-!Testing Stuff
+!Multiplier
 sigma_tr = 0.0362
 sigma_a = 0.1532
-sigma_f = 0.1570
+sigma_f = 0.157
+
+!Moderator
+sigma_a_m = 0.00808
+sigma_f_m = 0
+sigma_tr_m = 0.0179
 
 
 !===Diffusion Coefficient Definition
-D = 1/(3*sigma_tr)
+D_mult = 1/(3*sigma_tr)
+D_mod = 1/(3*sigma_tr_m)
 
 !Tolerances For Loops
-tol1 = 0.00001
-tol2 = 0.00001
+tol1 = 0.000001
+tol2 = 0.000001
 
 !===Counters and the like
 counter = 0
@@ -68,21 +78,22 @@ w_old = 0
 w_new = 0
 W=100
 w_orig = W
+
+w_old_m = 0
+w_new_m = 0
+W_m = 10
+w_orig_m = W_m 
+
+
 k=0
 k1 = 0
 k2 = 0
 
-!===Sources and Fission Matrix
-do i=1,n
-   do j=1,n
-      IF (i==j) THEN
-         sigma_mat(i,j) = sigma_f
-      ELSE
-         sigma_mat(i,j) = 0
-      END IF
-   end do
-end do
-sigma_mat(1,1) = sigma_f/2
+outfile = 'test.csv'
+
+
+
+
 
 !=======================================================================
 !            Iterations
@@ -90,33 +101,71 @@ sigma_mat(1,1) = sigma_f/2
 !OUTER LOOP: Find crtitical W
 do while(1 .NE. 0)
 del_x = W/n
+del_x_m = W_m/nmod
 
-!Deconstruction Matrix A
+!===Deconstruction Matrix A
+!A Matrix - Multiplier
 mat_A=0   
 do i=1,n
    do j=1,n
-      if (i==j) mat_A(i,j) = ((2*D)/(del_x**2) + sigma_a)
-      if (i==j+1) mat_A(i,j) = -D/(del_x**2) 
-      if (i==j-1) mat_A(i,j) = -D/(del_x**2)
+      if (i==j) mat_A(i,j) = ((2*D_mult)/(del_x) + sigma_a*del_x)
+      if (i==j+1) mat_A(i,j) = -D_mult/(del_x) 
+      if (i==j-1) mat_A(i,j) = -D_mult/(del_x)
 
    end do
 end do
 mat_A(1,1) = mat_A(1,1)/2
 
+
+!A Matrix - Moderator
+do i=n,init_a
+   do j=n, init_a
+      if (i==j) mat_A(i,j) = ((2*D_mod)/(del_x_m) + sigma_a_m*del_x_m)
+      if (i==j+1) mat_A(i,j) = -D_mod/(del_x_m) 
+      if (i==j-1) mat_A(i,j) = -D_mod/(del_x_m)
+
+   end do
+end do
+
+!Multiplier - Moderator Interface Term
+cross1 = D_mult/(del_x) + D_mod/(del_x_m)
+cross2 = sigma_a*del_x + sigma_a_m*del_x_m
+mat_A(n,n) =  cross1 + cross2/2
+
+!do i=1,init_a
+!      print *, 'A:', mat_A(i,:)
+!end do
+
+sigma_mat = 0
+!===Sources and Fission Matrix
+!Multiplier => fission
+do i=1,n
+   do j=1,n
+      IF (i==j) THEN
+         sigma_mat(i,j) = sigma_f*del_x
+      ELSE
+         sigma_mat(i,j) = 0
+      END IF
+   end do
+end do
+sigma_mat(1,1) = sigma_mat(1,1)/2
+
+
+
 !Calculate Inverse A Matrix Outside of Loop Once (faster)
 Ainv = 0
 Ainv = mat_A
-call DGETRF(n, n, Ainv, n, ipiv, info)
+call DGETRF(init_a, init_a, Ainv, init_a, ipiv, info)
 if (info /= 0) stop 'Matrix is numerically singular!'
-call DGETRI(n, Ainv, n, ipiv, work, n, info)  
+call DGETRI(init_a, Ainv, init_a, ipiv, work, init_a, info)  
 if (info /= 0) stop 'Solution of the linear system failed!'
 !print *, 'AINV:', Ainv
 
 
-!Initial Guesses
+!===Initial Guesses
 flux = 1
 k = 1
-S = 1/k*(matmul(sigma_mat,flux))
+S = 1/k*(matmul(sigma_mat, flux))
 test = 1
 
    !INNER LOOP: Find k for W
@@ -128,7 +177,11 @@ test = 1
    
          S = (1/k_old)*(matmul(sigma_mat,flux))
          k = k_old*(sum(S)/sum(S_old))
-   !      print *, 'Current K:', k
+         !print *, 'Current K:', k
+         !read *,sigma_tr
+!         print *, 'flux:', flux
+!         read *,sigma_tr   
+   
    
          test = abs((k-k_old)/k)
          counter = counter + 1
@@ -139,7 +192,12 @@ test = 1
       print *, ' '   
       exit
    end if
-
+   
+!   print *, '=====BREAK====='
+!   print *, 'Current K:', k
+!   print *, 'W:', W
+!   print *, ' '
+!   read *,sigma_tr
 
 
    if (newton == 1) then
@@ -170,7 +228,11 @@ do i=1,n
    x_step(i) = (i-1)*W/(n-1)
 end do
 
-OPEN(UNIT=1,FILE='test.csv',FORM="FORMATTED",STATUS="REPLACE",ACTION="WRITE")
+do i=1,nmod
+   x_step(i+n) = (i)*W_m/(nmod-1) + x_step(n)
+end do
+
+OPEN(UNIT=1,FILE=outfile,FORM="FORMATTED",STATUS="REPLACE",ACTION="WRITE")
 do i=1,init_a
 !   write(1,*) x(i), ',', F(i)
    write(1,*) x_step(i), ',', flux(i)
@@ -189,11 +251,11 @@ print *, 'Program Exexuted Successfully'
 print *,' '
 print *,' '
 print *,'=============================================================='
-print *,'             Project 2 Final Results'
+print *,'             1Group w/ Moderator Final Results'
 print *,'=============================================================='
 print *,' '
 
-print *,'Diffusion Coef.:', D
+print *,'Diffusion Coef.:', D_mult
 print *, ' '
 write(*,*) 'Inner Loop Tolerance = ', tol1
 write(*,*) 'Outer Loop Tolerance = ', tol2
@@ -205,7 +267,8 @@ write(*,*) 'Original Width Guess [cm] = ', w_orig
 write(*,*) 'Original Width k Value= ', k_orig
 print *, ' '
 write(*,*) 'Final Multiplication Factor (k) = ', k
-write(*,*) 'Critical Width [cm] = ', W*2
+write(*,*) 'Moderator Width [cm] = ', W_m
+write(*,*) 'Half Critical Width [cm] = ', W
 print *, ' '
 
    
