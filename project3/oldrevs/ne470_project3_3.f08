@@ -1,14 +1,14 @@
 !ne470_project3_1.f08
 
-!Title:			NE 470 Project 3
+!Title:			NE 470 Project 3 Tester
 !Engineer:		Tom Looby
 !Date:			11/12/2017
-!Description:	Solves Multigroup Diffusion Equations
+!Description:	Solves Multigroup Diffusion Equations w/ no moderator
 
 !=======================================================================
 !            MAIN PROGRAM
 !=======================================================================
-program ne470_project2_7
+program ne470_project3_3
 use iso_fortran_env
 implicit none
 
@@ -20,7 +20,7 @@ implicit none
 integer :: i, j, g, ind, counter, newton, n, init_a, info, gN, nmod
 real(real64) :: del_x, W, test, temp, cross1, cross2, del_x_m
 real(real64) :: k, k_old, tol1, tol2, w_new, w_old, k1, k2, Wmod
-real(real64) :: react_new, react_old, k_orig, w_orig, ratio, c
+real(real64) :: react_new, react_old, k_orig, w_orig, ratio
 
 integer, ALLOCATABLE :: ipiv(:)
 
@@ -44,9 +44,7 @@ external DGETRF, DGETRS
 print *,"How many Multiplier Nodes? "
 read *,n
 
-print *,"How many Moderator Nodes? "
-read *,nmod
-
+nmod = 0
 print *,"How many Groups? "
 read *,gN
 
@@ -77,20 +75,16 @@ if (gN == 1) then
    sigR(1) = 0.1532
    siga(1) = 0.1532
    vsigf(1) = 0.157
-!   sigR(1) = 0.066535
-!   siga(1) = 0.066535
-!   vsigf(1) = 0.096808
    
    !Moderator
-   siga_h2o(1) = 0.0161649
-   sigR_h2o(1) = 0.0161649
-
+   siga_h2o(1) = 0.00808
+   sigR_h2o(1) = 0.00808
    
    
    !===Diffusion Coefficient Definition
    D = 1/(3*0.0362)
    D_h2o = 1/(3*0.0179)
-   
+
 
 elseif (gN == 4) then
    !+++Four Group Constants
@@ -114,15 +108,15 @@ elseif (gN == 4) then
    D(3) = 0.6318
    D(4) = 0.3543
    
-   sigR(1) = 0.08795 + siga(1)
-   sigR(2) = 0.06124 + siga(2)
-   sigR(3) = 0.09506 + siga(3)
-   sigR(4) = 0.1210 + siga(4)
+   sigR(1) = 0.08795
+   sigR(2) = 0.06124
+   sigR(3) = 0.09506
+   sigR(4) = 0.1210
    
    sigs = 0
-   sigs(1,2) = sigR(1) - siga(1)
-   sigs(2,3) = sigR(2) - siga(2)
-   sigs(3,4) = sigR(3) - siga(3)
+   sigs(1,2) = sigR(1)
+   sigs(2,3) = sigR(2)
+   sigs(3,4) = sigR(3)
    
    
    !H20 cross sections
@@ -165,6 +159,8 @@ elseif (gN == 4) then
       D_h2o(i) = 1/(3*sigtr_h2o(i))
    end do
    
+  
+
 
 elseif (gN == 2) then
    !+++Two Group Constants
@@ -180,13 +176,13 @@ elseif (gN == 2) then
    D(1) = 1.2627
    D(2) = 0.3543
    
-   sigR(1) = 0.02619 + siga(1)
-   sigR(2) = 0.1210 + siga(2)
+   sigR(1) = 0.02619
+   sigR(2) = 0.1210
 
    
    !sigs(1,1) = sigR(1) - siga(1)
    sigs(1,1) = 0
-   sigs(1,2) = sigR(1) - siga(1)
+   sigs(1,2) = sigR(1)
    sigs(2,1) = 0
    sigs(2,2) = 0
    
@@ -201,11 +197,11 @@ elseif (gN == 2) then
    siga_h2o(1) = 0.0004
    siga_h2o(2) = 0.0197   
    
-   sigR_h2o(1) = 0.0494 + siga_h2o(1)
+   sigR_h2o(1) = 0.0494
    sigR_h2o(2) = siga_h2o(2)
    
    sigs_h2o = 0
-   sigs_h2o(1,2) = sigR_h2o(1) - siga_h2o(1)
+   sigs_h2o(1,2) = sigR_h2o(1) - siga_h2o(1) 
 
    
 end if
@@ -232,15 +228,12 @@ Wmod = 20
 k=0
 k1 = 0
 k2 = 0
-
 !Patition Function - Fission Neutrons only born in Fast Group
 X=0
 X(1)=1
 
-c=0
 
-
-outfile = 'proj3_data.csv'
+outfile = 'test.csv'
 
 !=======================================================================
 !            Solution
@@ -250,7 +243,7 @@ outfile = 'proj3_data.csv'
 do while(1 .NE. 0)
 del_x = W/n
 del_x_m = Wmod/nmod
-ratio=del_x/del_x_m
+ratio=del_x_m/del_x
 sigma_mat=0
 
    !====Deconstruction Matrix A (3-D) with Removal and Moderator
@@ -264,44 +257,19 @@ sigma_mat=0
             else if (i==j .AND. g==gN)  then
                mat_A(i,j,g) = ((2*D(g))/(del_x**2) + siga(g))
             end if
-            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x**2)*(1 + c/(2*i - 1))
-            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x**2)*(1 + c/(2*i - 1))
-      
-         end do
-      end do
-      
-   !Moderator===
-      do i=n,init_a
-         do j=n,init_a
-            if (i==j .AND. g/=gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + sigR_h2o(g))
-            else if( i==j .AND. g==gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + siga_h2o(g))
-            end if
-            if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2)*(1 + c/(2*i - 1)) 
-            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2)*(1 + c/(2*i - 1))
+            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x**2) 
+            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x**2)
       
          end do
       end do
 
-      !Multiplier - Moderator Interface Term
-      if (g/=gN) then
-         cross1 = (D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2))*(1 + c/(2*i - 1))
-         cross2 = sigR(g) + sigR_h2o(g)
-      else if (g==gN) then
-         cross1 = (D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2))*(1 + c/(2*i - 1))
-         cross2 = siga(g) + siga_h2o(g)
-      end if
-      mat_A(n,n,g) =  cross1 + cross2/2
       mat_A(1,1,g) = mat_A(1,1,g)/2
       
-!      if(g==2) then
-!         do i=1,init_a
-!            print *, 'A:', mat_A(i,:,g)
-!         end do
-!         read *, temp
-!      end if
-
+!      do i=1,init_a
+!         print *, 'A:', mat_A(i,:,g)
+!      end do
+!      read *, temp
+    
   
       !Calculate Inverse A Matrix (3-D)
       Atemp = 0
@@ -312,37 +280,33 @@ sigma_mat=0
       if (info /= 0) stop 'Solution of the linear system failed!'
 !      print *, 'Atemp:', Atemp
       Ainv(:,:,g) = Atemp
-      
 
-      !Fission Matrix (No fission in h20 so =0)
+      !Fission Matrix
       do i=1,n
          do j=1,n
             IF (i==j) THEN
                sigma_mat(i,j,g) = vsigf(g)
             ELSE
-               sigma_mat(i,j,g) = 0
+            sigma_mat(i,j,g) = 0
                
             END IF
          end do
       end do
       sigma_mat(1,1,g) = sigma_mat(1,1,g)/2
-      sigma_mat(n,n,g) = sigma_mat(n,n,g)/2
-
     end do
 
 
    !Initial Guesses
-   flux = 0
-   flux(:,1) = 1
+   flux = 1
    k = 1
 
    !Build Source Matrix
    do g=1,gN
       s_mat(:,g) = matmul(sigma_mat(:,:,g),flux(:,g))
    end do
+
    S=sum(s_mat, DIM = 2)
    RHS = 1/k*X(1)*S
-
    test = 1
    scat=0
    
@@ -350,18 +314,18 @@ sigma_mat=0
    do while(test >= tol1)
       k_old = k
       S_old = S
-      !scat=0
+      scat=0
       
       if (gN/=1) then
          do g=1,gN-1
             flux(:,g) = matmul(Ainv(:,:,g), RHS)
 
             !Build Scattering Matrix
-            scat(1:n-1,g+1) = (flux(1:n-1,g)*sigs(g,g+1))
-            scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))
-            scat(n,g+1) = (scat(n-1,g+1) + scat(n+1,g+1))/2
+            scat(1:n,g+1) = (flux(1:n,g)*sigs(g,g+1))
+            !scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))
             
             RHS = 1/k*X(g+1)*S + scat(:,g+1)
+            RHS = scat(:,g+1)
 
          end do
       end if
@@ -375,6 +339,7 @@ sigma_mat=0
       
       k = k_old*sum(S)/sum(S_old)
       RHS = 1/k*X(1)*S
+
 
       test = abs((k-k_old)/k)
       counter = counter + 1
@@ -397,12 +362,12 @@ sigma_mat=0
    end if
 
    print *, '====================BREAK======================'
-   print *, 'First Eigenvalue, k = ', k
-!   print *, 'Fast Flux = ', flux(:,1)
-!   print *, 'Thermal flux = ', flux(:,2)
+   print *, 'k = ', k
+   print *, 'Fast Flux = ', flux(:,1)
+   print *, 'Thermal flux = ', flux(:,2)
    print *, 'Width = ', W
    print *, ' '
-   print *, 'Press any numeric to continue...'
+   print *, ' '
    read *, temp
    
 
@@ -413,7 +378,7 @@ sigma_mat=0
       w_new = W
       k2 = k
       k_orig = k
-      W = w_new*1.01
+      W = w_new*1.1
       newton = 2
    
    else
@@ -491,4 +456,4 @@ print *, ' '
 
 
 
-end program ne470_project2_7
+end program ne470_project3_3

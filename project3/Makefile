@@ -1,5 +1,5 @@
-EXECUTABLE=ne470_project3_1.exe
-SOURCES=ne470_project3_1.f08
+EXECUTABLE=ne470_project3_4.exe
+SOURCES=ne470_project3_4.f08
 
 #EXECUTABLE=tester_lapack.exe
 #SOURCES=tester_lapack.f08

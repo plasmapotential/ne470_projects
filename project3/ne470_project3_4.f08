@@ -226,7 +226,7 @@ w_old = 0
 w_new = 0
 W=100
 w_orig = W
-Wmod = 20
+Wmod = 10
 
 !K_effective
 k=0
@@ -260,12 +260,12 @@ sigma_mat=0
       do i=1,n
          do j=1,n
             if (i==j .AND. g/=gN) then
-               mat_A(i,j,g) = ((2*D(g))/(del_x**2) + sigR(g))
+               mat_A(i,j,g) = ((2*D(g))/(del_x) + sigR(g)*del_x)
             else if (i==j .AND. g==gN)  then
-               mat_A(i,j,g) = ((2*D(g))/(del_x**2) + siga(g))
+               mat_A(i,j,g) = ((2*D(g))/(del_x) + siga(g)*del_x)
             end if
-            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x**2)*(1 + c/(2*i - 1))
-            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x**2)*(1 + c/(2*i - 1))
+            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x)*(1 + c/(2*i - 1))
+            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x)*(1 + c/(2*i - 1))
       
          end do
       end do
@@ -274,23 +274,23 @@ sigma_mat=0
       do i=n,init_a
          do j=n,init_a
             if (i==j .AND. g/=gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + sigR_h2o(g))
+               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m) + sigR_h2o(g)*del_x_m)
             else if( i==j .AND. g==gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + siga_h2o(g))
+               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m) + siga_h2o(g)*del_x_m)
             end if
-            if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2)*(1 + c/(2*i - 1)) 
-            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2)*(1 + c/(2*i - 1))
+            if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)*(1 + c/(2*i - 1))
+            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)*(1 + c/(2*i - 1))
       
          end do
       end do
 
       !Multiplier - Moderator Interface Term
       if (g/=gN) then
-         cross1 = (D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2))*(1 + c/(2*i - 1))
-         cross2 = sigR(g) + sigR_h2o(g)
+         cross1 = (D(g)/(del_x) + D_h2o(g)/(del_x_m))*(1 + c/(2*i - 1))
+         cross2 = sigR(g)*del_x + sigR_h2o(g)*del_x_m
       else if (g==gN) then
-         cross1 = (D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2))*(1 + c/(2*i - 1))
-         cross2 = siga(g) + siga_h2o(g)
+         cross1 = (D(g)/(del_x) + D_h2o(g)/(del_x_m))*(1 + c/(2*i - 1))
+         cross2 = siga(g)*del_x + siga_h2o(g)*del_x_m
       end if
       mat_A(n,n,g) =  cross1 + cross2/2
       mat_A(1,1,g) = mat_A(1,1,g)/2
@@ -357,11 +357,11 @@ sigma_mat=0
             flux(:,g) = matmul(Ainv(:,:,g), RHS)
 
             !Build Scattering Matrix
-            scat(1:n-1,g+1) = (flux(1:n-1,g)*sigs(g,g+1))
-            scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))
+            scat(1:n-1,g+1) = (flux(1:n-1,g)*sigs(g,g+1))*del_x
+            scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))*del_x_m
             scat(n,g+1) = (scat(n-1,g+1) + scat(n+1,g+1))/2
             
-            RHS = 1/k*X(g+1)*S + scat(:,g+1)
+            RHS = (1/k*X(g+1)*S + scat(:,g+1)/gN)
 
          end do
       end if
@@ -371,7 +371,7 @@ sigma_mat=0
       do g=1,gN
          s_mat(:,g) = matmul(sigma_mat(:,:,g), flux(:,g))
       end do
-      S = sum(s_mat, DIM=2)
+      S = sum(s_mat, DIM=2)/gN
       
       k = k_old*sum(S)/sum(S_old)
       RHS = 1/k*X(1)*S
@@ -443,11 +443,17 @@ end do
 do i=1,nmod
    x_step(i+n) = (i)*Wmod/(nmod-1) + x_step(n)
 end do
+x_step = x_step*gN
 
 OPEN(UNIT=1,FILE=outfile,FORM="FORMATTED",STATUS="REPLACE",ACTION="WRITE")
 do i=1,init_a
-!   write(1,*) x(i), ',', F(i)
-   write(1,*) x_step(i), ',', flux(i, 1), ',', flux(i, 2)!, ',', flux(i, 3), ',', flux(i, 4)
+   if(gN==1) then
+      write(1,*) x_step(i), ',', flux(i, 1)
+   elseif (gN==2) then
+      write(1,*) x_step(i), ',', flux(i, 1), ',', flux(i, 2)
+   elseif(gN==4) then
+      write(1,*) x_step(i), ',', flux(i, 1), ',', flux(i, 2), ',', flux(i, 3), ',', flux(i, 4)
+   end if
 end do
 CLOSE(UNIT=1)
 print *, 'File Written Successfully'   
@@ -465,7 +471,7 @@ print *, 'Program Exexuted Successfully'
 print *,' '
 print *,' '
 print *,'=============================================================='
-print *,'             Project 2 Final Results'
+print *,'             Project 3 Final Results'
 print *,'=============================================================='
 print *,' '
 
@@ -484,7 +490,7 @@ write(*,*) 'Original Width k Value= ', k_orig
 print *, ' '
 write(*,*) 'Final Multiplication Factor (k) = ', k
 write(*,*) 'Moderator Width [cm] = ', Wmod
-write(*,*) 'Half Critical Width [cm] = ', W
+write(*,*) 'Half Critical Width [cm] = ', W*gN
 print *, ' '
    
 
