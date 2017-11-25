@@ -16,7 +16,7 @@ implicit none
 !            Variables
 !=======================================================================
 
-integer :: i, j, ind, counter, newton, n, init_a, info, nmod
+integer :: i, j, ind, counter, newton, n, init_a, info, nmod, temp
 real(real64) :: del_x, D_mult, sigma_tr, sigma_a, W, test
 real(real64) :: sigma_f, k, k_old, tol1, tol2, w_new, w_old, k1, k2
 real(real64) :: react_new, react_old, k_orig, w_orig
@@ -108,9 +108,9 @@ del_x_m = W_m/nmod
 mat_A=0   
 do i=1,n
    do j=1,n
-      if (i==j) mat_A(i,j) = ((2*D_mult)/(del_x) + sigma_a*del_x)
-      if (i==j+1) mat_A(i,j) = -D_mult/(del_x) 
-      if (i==j-1) mat_A(i,j) = -D_mult/(del_x)
+      if (i==j) mat_A(i,j) = ((2*D_mult)/(del_x**2) + sigma_a)
+      if (i==j+1) mat_A(i,j) = -D_mult/(del_x**2) 
+      if (i==j-1) mat_A(i,j) = -D_mult/(del_x**2)
 
    end do
 end do
@@ -120,21 +120,22 @@ mat_A(1,1) = mat_A(1,1)/2
 !A Matrix - Moderator
 do i=n,init_a
    do j=n, init_a
-      if (i==j) mat_A(i,j) = ((2*D_mod)/(del_x_m) + sigma_a_m*del_x_m)
-      if (i==j+1) mat_A(i,j) = -D_mod/(del_x_m) 
-      if (i==j-1) mat_A(i,j) = -D_mod/(del_x_m)
+      if (i==j) mat_A(i,j) = ((2*D_mod)/(del_x_m**2) + sigma_a_m)
+      if (i==j+1) mat_A(i,j) = -D_mod/(del_x_m**2) 
+      if (i==j-1) mat_A(i,j) = -D_mod/(del_x_m**2)
 
    end do
 end do
 
 !Multiplier - Moderator Interface Term
-cross1 = D_mult/(del_x) + D_mod/(del_x_m)
-cross2 = sigma_a*del_x + sigma_a_m*del_x_m
+cross1 = D_mult/(del_x**2) + D_mod/(del_x_m**2)
+cross2 = sigma_a + sigma_a_m
 mat_A(n,n) =  cross1 + cross2/2
 
 !do i=1,init_a
 !      print *, 'A:', mat_A(i,:)
 !end do
+!read *, temp
 
 sigma_mat = 0
 !===Sources and Fission Matrix
@@ -142,14 +143,13 @@ sigma_mat = 0
 do i=1,n
    do j=1,n
       IF (i==j) THEN
-         sigma_mat(i,j) = sigma_f*del_x
+         sigma_mat(i,j) = sigma_f
       ELSE
          sigma_mat(i,j) = 0
       END IF
    end do
 end do
 sigma_mat(1,1) = sigma_mat(1,1)/2
-
 
 
 !Calculate Inverse A Matrix Outside of Loop Once (faster)
@@ -166,6 +166,7 @@ if (info /= 0) stop 'Solution of the linear system failed!'
 flux = 1
 k = 1
 S = 1/k*(matmul(sigma_mat, flux))
+
 test = 1
 
    !INNER LOOP: Find k for W
@@ -177,6 +178,7 @@ test = 1
    
          S = (1/k_old)*(matmul(sigma_mat,flux))
          k = k_old*(sum(S)/sum(S_old))
+
          !print *, 'Current K:', k
          !read *,sigma_tr
 !         print *, 'flux:', flux

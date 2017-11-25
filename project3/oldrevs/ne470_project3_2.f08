@@ -20,7 +20,7 @@ implicit none
 integer :: i, j, g, ind, counter, newton, n, init_a, info, gN, nmod
 real(real64) :: del_x, W, test, temp, cross1, cross2, del_x_m
 real(real64) :: k, k_old, tol1, tol2, w_new, w_old, k1, k2, Wmod
-real(real64) :: react_new, react_old, k_orig, w_orig, ratio
+real(real64) :: react_new, react_old, k_orig, w_orig
 
 integer, ALLOCATABLE :: ipiv(:)
 
@@ -47,17 +47,11 @@ read *,n
 print *,"How many Moderator Nodes? "
 read *,nmod
 
-print *,"How many Groups? "
-read *,gN
-
 !=======================================================================
 !            Literals and Initial Conditions
 !=======================================================================
 !Allocate constants for number of groups
-if (gN /= 1 .AND. gN /= 2 .AND. gN /= 4) then
-   gN=1
-end if
-
+gN = 2
 ALLOCATE(vsigf(gN), sigf(gN), siga(gN), D(gN), sigR(gN), D_h2o(gN))
 ALLOCATE(sigtr_h2o(gN), siga_h2o(gN), sigs_h2o(gN,gN), sigR_h2o(gN))
 
@@ -72,23 +66,7 @@ ALLOCATE(S_old(init_a), S_new(init_a), S(init_a), Atemp(init_a,init_a))
 ALLOCATE(RHS(init_a), X(gN), sigs(gN, gN), scat(init_a,gN), x_step(init_a))
 ALLOCATE(fis_mat(init_a, init_a), s_mat(init_a,gN))
 
-if (gN == 1) then
-   !Multiplier
-   sigR(1) = 0.1532
-   siga(1) = 0.1532
-   vsigf(1) = 0.157
-   
-   !Moderator
-   siga_h2o(1) = 0.00808
-   sigR_h2o(1) = 0.00808
-   
-   
-   !===Diffusion Coefficient Definition
-   D = 1/(3*0.0362)
-   D_h2o = 1/(3*0.0179)
-
-
-elseif (gN == 4) then
+if (gN == 4) then
    !+++Four Group Constants
    vsigf(1) = 0.0009572
    vsigf(2) = 0.001193
@@ -114,12 +92,6 @@ elseif (gN == 4) then
    sigR(2) = 0.06124
    sigR(3) = 0.09506
    sigR(4) = 0.1210
-   
-   sigs = 0
-   sigs(1,2) = sigR(1)
-   sigs(2,3) = sigR(2)
-   sigs(3,4) = sigR(3)
-   
    
    !H20 cross sections
    sigtr_h2o(1) = 0.20608
@@ -180,7 +152,6 @@ elseif (gN == 2) then
    
    sigR(1) = 0.02619
    sigR(2) = 0.1210
-
    
    !sigs(1,1) = sigR(1) - siga(1)
    sigs(1,1) = 0
@@ -193,14 +164,14 @@ elseif (gN == 2) then
    D_h2o(1) = 1.13
    D_h2o(2) = 0.16
    
+   sigR_h2o(1) = 0.0494
+   sigR_h2o(2) = 0
+   
    sigtr_h2o(1) = 0.20608
    sigtr_h2o(2) =0.60215
 
    siga_h2o(1) = 0.0004
    siga_h2o(2) = 0.0197   
-   
-   sigR_h2o(1) = 0.0494
-   sigR_h2o(2) = siga_h2o(2)
    
    sigs_h2o = 0
    sigs_h2o(1,2) = 0.0494
@@ -208,8 +179,8 @@ elseif (gN == 2) then
 end if
 
 !Tolerances For Loops
-tol1 = 0.000001
-tol2 = 0.000001
+tol1 = 0.00001
+tol2 = 0.00001
 
 !===Counters and the like
 counter = 0
@@ -223,7 +194,7 @@ w_old = 0
 w_new = 0
 W=100
 w_orig = W
-Wmod = 20
+Wmod = 10
 
 !K_effective
 k=0
@@ -244,8 +215,6 @@ outfile = 'test.csv'
 do while(1 .NE. 0)
 del_x = W/n
 del_x_m = Wmod/nmod
-ratio=del_x_m/del_x
-sigma_mat=0
 
    !====Deconstruction Matrix A (3-D) with Removal and Moderator
    !Multiplier===
@@ -254,12 +223,12 @@ sigma_mat=0
       do i=1,n
          do j=1,n
             if (i==j .AND. g/=gN) then
-               mat_A(i,j,g) = ((2*D(g))/(del_x**2) + sigR(g))
+               mat_A(i,j,g) = ((2*D(g))/(del_x) + sigR(g)*del_x)
             else if (i==j .AND. g==gN)  then
-               mat_A(i,j,g) = ((2*D(g))/(del_x**2) + siga(g))
+               mat_A(i,j,g) = ((2*D(g))/(del_x) + siga(g)*del_x)
             end if
-            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x**2) 
-            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x**2)
+            if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x) 
+            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x)
       
          end do
       end do
@@ -268,31 +237,26 @@ sigma_mat=0
       do i=n,init_a
          do j=n,init_a
             if (i==j .AND. g/=gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + sigR_h2o(g))
+               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m) + sigR_h2o(g)*del_x_m)
             else if( i==j .AND. g==gN) then
-               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m**2) + siga_h2o(g))
+               mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m) + siga_h2o(g)*del_x_m)
             end if
-            if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2) 
-            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m**2)
+            if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m) 
+            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)
       
          end do
       end do
 
       !Multiplier - Moderator Interface Term
       if (g/=gN) then
-         cross1 = D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2)
-         cross2 = sigR(g) + sigR_h2o(g)
+         cross1 = D(g)/(del_x) + D_h2o(g)/(del_x_m)
+         cross2 = sigR(g)*del_x + sigR_h2o(g)*del_x_m
       else if (g==gN) then
-         cross1 = D(g)/(del_x**2) + D_h2o(g)/(del_x_m**2)
-         cross2 = siga(g) + siga_h2o(g)
+         cross1 = D(g)/(del_x) + D_h2o(g)/(del_x_m)
+         cross2 = siga(g)*del_x + siga_h2o(g)*del_x_m
       end if
       mat_A(n,n,g) =  cross1 + cross2/2
       mat_A(1,1,g) = mat_A(1,1,g)/2
-      
-!      do i=1,init_a
-!         print *, 'A:', mat_A(i,:,g)
-!      end do
-!      read *, temp
     
   
       !Calculate Inverse A Matrix (3-D)
@@ -300,8 +264,8 @@ sigma_mat=0
       Atemp = mat_A(:,:,g)
       call DGETRF(init_a, init_a, Atemp, init_a, ipiv, info)
       if (info /= 0) stop 'Matrix is numerically singular!'
-      call DGETRI(init_a, Atemp, init_a, ipiv, work, init_a, info)  
-      if (info /= 0) stop 'Solution of the linear system failed!'
+!      call DGETRI(init_a, Atemp, init_a, ipiv, work, init_a, info)  
+!      if (info /= 0) stop 'Solution of the linear system failed!'
 !      print *, 'Atemp:', Atemp
       Ainv(:,:,g) = Atemp
 
@@ -309,21 +273,19 @@ sigma_mat=0
       do i=1,n
          do j=1,n
             IF (i==j) THEN
-               sigma_mat(i,j,g) = vsigf(g)
-            ELSE
-            sigma_mat(i,j,g) = 0
+               sigma_mat(i,j,g) = vsigf(g)*del_x/2
                
             END IF
          end do
       end do
       sigma_mat(1,1,g) = sigma_mat(1,1,g)/2
+
     end do
 
-
    !Initial Guesses
-   flux = 1
+   flux(:,1) = 1
+   flux(:,gN) = 0
    k = 1
-
    !Build Source Matrix
    do g=1,gN
       s_mat(:,g) = matmul(sigma_mat(:,:,g),flux(:,g))
@@ -331,40 +293,47 @@ sigma_mat=0
 
    S=sum(s_mat, DIM = 2)
    RHS = 1/k*X(1)*S
+   RHS(init_a) = 0
    test = 1
-   scat=0
    
    !INNER LOOP: Find k for W
    do while(test >= tol1)
       k_old = k
-      S_old = S
-      scat=0
+      S_old = S   
+      flux=0
       
-      if (gN/=1) then
-         do g=1,gN-1
-            flux(:,g) = matmul(Ainv(:,:,g), RHS)
+      !Build Flux Matrix for all Groups
+      do g=1,gN-1
+            call DGETRS('N', init_a, 1, Ainv(:,:,g), init_a, ipiv, RHS, init_a, info)  
+            if (info /= 0) stop 'Solution of the linear system failed!'
+            flux(:,g) = RHS
 
             !Build Scattering Matrix
-            scat(1:n-1,g+1) = (flux(1:n-1,g)*sigs(g,g+1))
-            scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))
+            scat(1:n-1,:) = (matmul(flux(1:n,:), sigs))*del_x
+            scat(n:init_a,:) = (matmul(flux(n+1:init_a,:), sigs_h2o))*del_x_m
+            !scat(n,:) = (((matmul(flux(n,:), sigs_h2o))*del_x_m)+scat(n,:))/2
             
-            RHS = 1/k*X(g+1)*S + scat(:,g+1)
-            RHS = scat(:,g+1)
+            
+            !Build Next Group RHS
+            RHS = 1/k_old*X(g+1)*S_old + scat(:,g+1)
 
-         end do
-      end if
-      flux(:,gN) = matmul(Ainv(:,:,gN), RHS)
-      
-      !New Fission Matrix
-      do g=1,gN
-         s_mat(:,g) = matmul(sigma_mat(:,:,g), flux(:,g))
       end do
-      S = sum(s_mat, DIM=2)
+
+      call DGETRS('N', init_a, 1, Ainv(:,:,gN), init_a, ipiv, RHS, init_a, info)  
+      if (info /= 0) stop 'Solution of the linear system failed!'
+      flux(:,gN) = RHS
+
+
+
+      !Build Source Matrix
+      do g=1,gN
+         s_mat(:,g) = matmul(sigma_mat(:,:,g),flux(:,g))
+      end do
       
-      k = k_old*sum(S)/sum(S_old)
+      S=sum(s_mat, DIM = 2)
+      k = k_old*((sum(S))/(sum(S_old)))
       RHS = 1/k*X(1)*S
-
-
+      
       test = abs((k-k_old)/k)
       counter = counter + 1
 !      print *, 'Current S:', S
@@ -385,14 +354,14 @@ sigma_mat=0
       exit
    end if
 
-   print *, '====================BREAK======================'
-   print *, 'k = ', k
-   print *, 'Fast Flux = ', flux(:,1)
-   print *, 'Thermal flux = ', flux(:,2)
-   print *, 'Width = ', W
-   print *, ' '
-   print *, ' '
-   read *, temp
+!   print *, '====================BREAK======================'
+!   print *, 'k = ', k
+!   print *, 'Fast Flux = ', flux(:,1)
+!   print *, 'Thermal flux = ', flux(:,2)
+!   print *, 'Width = ', W
+!   print *, ' '
+!   print *, ' '
+!   read *, temp
    
 
 
@@ -402,7 +371,7 @@ sigma_mat=0
       w_new = W
       k2 = k
       k_orig = k
-      W = w_new*1.1
+      W = w_new*1.01
       newton = 2
    
    else
@@ -458,9 +427,7 @@ print *,'             Project 2 Final Results'
 print *,'=============================================================='
 print *,' '
 
-print *,'Groups:', gN
-print *, ' '
-print *,'Diffusion Coef.s:', D
+print *,'Diffusion Coef.:', D
 print *, ' '
 write(*,*) 'Inner Loop Tolerance = ', tol1
 write(*,*) 'Outer Loop Tolerance = ', tol2
