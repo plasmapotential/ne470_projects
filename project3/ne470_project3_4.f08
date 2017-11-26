@@ -17,10 +17,10 @@ implicit none
 !            Variables
 !=======================================================================
 
-integer :: i, j, g, ind, counter, newton, n, init_a, info, gN, nmod
+integer :: i, j, g, ind, counter, newton, n, init_a, info, gN, nmod, c
 real(real64) :: del_x, W, test, temp, cross1, cross2, del_x_m
 real(real64) :: k, k_old, tol1, tol2, w_new, w_old, k1, k2, Wmod
-real(real64) :: react_new, react_old, k_orig, w_orig, ratio, c
+real(real64) :: react_new, react_old, k_orig, w_orig, ratio
 
 integer, ALLOCATABLE :: ipiv(:)
 
@@ -94,7 +94,7 @@ if (gN == 1) then
 
 elseif (gN == 4) then
    !+++Four Group Constants
-   vsigf(1) = 0.0009572
+   vsigf(1) = 0.009572
    vsigf(2) = 0.001193
    vsigf(3) = 0.01768
    vsigf(4) = 0.18514
@@ -114,15 +114,15 @@ elseif (gN == 4) then
    D(3) = 0.6318
    D(4) = 0.3543
    
-   sigR(1) = 0.08795 + siga(1)
-   sigR(2) = 0.06124 + siga(2)
-   sigR(3) = 0.09506 + siga(3)
-   sigR(4) = 0.1210 + siga(4)
+   sigR(1) = 0.08795! + siga(1)
+   sigR(2) = 0.06124! + siga(2)
+   sigR(3) = 0.09506! + siga(3)
+   sigR(4) = 0.1210! + siga(4)
    
    sigs = 0
-   sigs(1,2) = sigR(1) - siga(1)
-   sigs(2,3) = sigR(2) - siga(2)
-   sigs(3,4) = sigR(3) - siga(3)
+   sigs(1,2) = sigR(1)! - siga(1)
+   sigs(2,3) = sigR(2)! - siga(2)
+   sigs(3,4) = sigR(3)! - siga(3)
    
    
    !H20 cross sections
@@ -180,13 +180,13 @@ elseif (gN == 2) then
    D(1) = 1.2627
    D(2) = 0.3543
    
-   sigR(1) = 0.02619 + siga(1)
-   sigR(2) = 0.1210 + siga(2)
+   sigR(1) = 0.02619! + siga(1)
+   sigR(2) = 0.1210! + siga(2)
 
    
    !sigs(1,1) = sigR(1) - siga(1)
    sigs(1,1) = 0
-   sigs(1,2) = sigR(1) - siga(1)
+   sigs(1,2) = sigR(1)! - siga(1)
    sigs(2,1) = 0
    sigs(2,2) = 0
    
@@ -237,7 +237,7 @@ k2 = 0
 X=0
 X(1)=1
 
-c=0
+c=2
 
 
 outfile = 'proj3_data.csv'
@@ -248,8 +248,8 @@ outfile = 'proj3_data.csv'
 
 !OUTER LOOP: Find crtitical W
 do while(1 .NE. 0)
-del_x = W/n
-del_x_m = Wmod/nmod
+del_x = W/(n-1)
+del_x_m = Wmod/(nmod-1)
 ratio=del_x/del_x_m
 sigma_mat=0
 
@@ -265,7 +265,7 @@ sigma_mat=0
                mat_A(i,j,g) = ((2*D(g))/(del_x) + siga(g)*del_x)
             end if
             if (i==j+1) mat_A(i,j,g) = -D(g)/(del_x)*(1 + c/(2*i - 1))
-            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x)*(1 + c/(2*i - 1))
+            if (i==j-1) mat_A(i,j,g) = -D(g)/(del_x)*(1 - c/(2*i - 1))
       
          end do
       end do
@@ -279,14 +279,14 @@ sigma_mat=0
                mat_A(i,j,g) = ((2*D_h2o(g))/(del_x_m) + siga_h2o(g)*del_x_m)
             end if
             if (i==j+1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)*(1 + c/(2*i - 1))
-            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)*(1 + c/(2*i - 1))
+            if (i==j-1) mat_A(i,j,g) = -D_h2o(g)/(del_x_m)*(1 - c/(2*i - 1))
       
          end do
       end do
 
       !Multiplier - Moderator Interface Term
       if (g/=gN) then
-         cross1 = (D(g)/(del_x) + D_h2o(g)/(del_x_m))*(1 + c/(2*i - 1))
+         cross1 = (D(g)/(del_x) + D_h2o(g)/(del_x_m))*(1 - c/(2*i - 1))
          cross2 = sigR(g)*del_x + sigR_h2o(g)*del_x_m
       else if (g==gN) then
          cross1 = (D(g)/(del_x) + D_h2o(g)/(del_x_m))*(1 + c/(2*i - 1))
@@ -318,7 +318,7 @@ sigma_mat=0
       do i=1,n
          do j=1,n
             IF (i==j) THEN
-               sigma_mat(i,j,g) = vsigf(g)
+               sigma_mat(i,j,g) = vsigf(g)/del_x
             ELSE
                sigma_mat(i,j,g) = 0
                
@@ -361,7 +361,7 @@ sigma_mat=0
             scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))*del_x_m
             scat(n,g+1) = (scat(n-1,g+1) + scat(n+1,g+1))/2
             
-            RHS = (1/k*X(g+1)*S + scat(:,g+1)/gN)
+            RHS = (1/k*X(g+1)*S + scat(:,g+1))/gN
 
          end do
       end if
@@ -371,10 +371,10 @@ sigma_mat=0
       do g=1,gN
          s_mat(:,g) = matmul(sigma_mat(:,:,g), flux(:,g))
       end do
-      S = sum(s_mat, DIM=2)/gN
+      S = sum(s_mat, DIM=2)
       
       k = k_old*sum(S)/sum(S_old)
-      RHS = 1/k*X(1)*S
+      RHS = 1/k*X(1)*S/gN
 
       test = abs((k-k_old)/k)
       counter = counter + 1
@@ -396,14 +396,14 @@ sigma_mat=0
       exit
    end if
 
-   print *, '====================BREAK======================'
-   print *, 'First Eigenvalue, k = ', k
-!   print *, 'Fast Flux = ', flux(:,1)
-!   print *, 'Thermal flux = ', flux(:,2)
-   print *, 'Width = ', W
-   print *, ' '
-   print *, 'Press any numeric to continue...'
-   read *, temp
+!   print *, '====================BREAK======================'
+!   print *, 'First Eigenvalue, k = ', k
+!!   print *, 'Fast Flux = ', flux(:,1)
+!!   print *, 'Thermal flux = ', flux(:,2)
+!   print *, 'Width = ', W
+!   print *, ' '
+!   print *, 'Press any numeric to continue...'
+!   read *, temp
    
 
 
@@ -443,7 +443,7 @@ end do
 do i=1,nmod
    x_step(i+n) = (i)*Wmod/(nmod-1) + x_step(n)
 end do
-x_step = x_step*gN
+!x_step = x_step*gN
 
 OPEN(UNIT=1,FILE=outfile,FORM="FORMATTED",STATUS="REPLACE",ACTION="WRITE")
 do i=1,init_a
@@ -454,7 +454,9 @@ do i=1,init_a
    elseif(gN==4) then
       write(1,*) x_step(i), ',', flux(i, 1), ',', flux(i, 2), ',', flux(i, 3), ',', flux(i, 4)
    end if
+  
 end do
+
 CLOSE(UNIT=1)
 print *, 'File Written Successfully'   
 print *, ' '
@@ -475,6 +477,15 @@ print *,'             Project 3 Final Results'
 print *,'=============================================================='
 print *,' '
 
+if (c==0) then
+   print *,'Geometry: Slab'
+elseif(c==1) then
+   print *,'Geometry: Cylinder'
+elseif(c==2) then
+   print *,'Geometry: Spherical'
+end if
+
+print *, ' '
 print *,'Groups:', gN
 print *, ' '
 print *,'Diffusion Coef.s:', D
@@ -490,7 +501,7 @@ write(*,*) 'Original Width k Value= ', k_orig
 print *, ' '
 write(*,*) 'Final Multiplication Factor (k) = ', k
 write(*,*) 'Moderator Width [cm] = ', Wmod
-write(*,*) 'Half Critical Width [cm] = ', W*gN
+write(*,*) 'Half Critical Width [cm] = ', W
 print *, ' '
    
 
