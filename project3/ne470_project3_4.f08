@@ -98,7 +98,7 @@ elseif (gN == 4) then
    vsigf(2) = 0.001193
    vsigf(3) = 0.01768
    vsigf(4) = 0.18514
-   
+
    sigf(1) = 0.003378
    sigf(2) = 0.0004850
    sigf(3) = 0.006970
@@ -108,7 +108,7 @@ elseif (gN == 4) then
    siga(2) = 0.002840
    siga(3) = 0.03053
    siga(4) = 0.1210
-   
+
    D(1) = 2.1623
    D(2) = 1.0867
    D(3) = 0.6318
@@ -119,10 +119,12 @@ elseif (gN == 4) then
    sigR(3) = 0.09506! + siga(3)
    sigR(4) = 0.1210! + siga(4)
    
+   
    sigs = 0
    sigs(1,2) = sigR(1)! - siga(1)
    sigs(2,3) = sigR(2)! - siga(2)
    sigs(3,4) = sigR(3)! - siga(3)
+   sigs(4,4) = 0
    
    
    !H20 cross sections
@@ -137,7 +139,7 @@ elseif (gN == 4) then
    siga_h2o(4) = 0.04637
    
    sigs_h2o = 0
-   !Original Cross Sections
+!   !Original Cross Sections
 !   sigs_h2o(1,1) = 0.37045
 !   sigs_h2o(1,2) = 0.04152
 !   sigs_h2o(1,3) = 0.00001
@@ -149,7 +151,7 @@ elseif (gN == 4) then
 !   sigs_h2o(4,3) = 0.00085
 !   sigs_h2o(4,4) = 1.96607
 
-   !Assuming Direct Coupling
+!   !Assuming Direct Coupling
    sigs_h2o(1,1) = 0
    sigs_h2o(1,2) = 0.04152
    sigs_h2o(1,3) = 0
@@ -160,11 +162,14 @@ elseif (gN == 4) then
    sigs_h2o(3,4) = 0.31856
    sigs_h2o(4,3) = 0
    sigs_h2o(4,4) = 0
+
    
    do i=1,gN
       D_h2o(i) = 1/(3*sigtr_h2o(i))
    end do
    
+
+
 
 elseif (gN == 2) then
    !+++Two Group Constants
@@ -205,7 +210,8 @@ elseif (gN == 2) then
    sigR_h2o(2) = siga_h2o(2)
    
    sigs_h2o = 0
-   sigs_h2o(1,2) = sigR_h2o(1) - siga_h2o(1)
+   sigs_h2o(1,2) = sigR_h2o(1)
+   sigs_h2o(2,2) = siga_h2o(2)
 
    
 end if
@@ -237,10 +243,14 @@ k2 = 0
 X=0
 X(1)=1
 
-c=2
+c=0
 
 
-outfile = 'proj3_data.csv'
+outfile = 'proj3_data_bonus25.csv'
+
+!For Bonus Question
+siga(2) = siga(2)*1.25
+
 
 !=======================================================================
 !            Solution
@@ -318,7 +328,7 @@ sigma_mat=0
       do i=1,n
          do j=1,n
             IF (i==j) THEN
-               sigma_mat(i,j,g) = vsigf(g)/del_x
+               sigma_mat(i,j,g) = vsigf(g)*del_x
             ELSE
                sigma_mat(i,j,g) = 0
                
@@ -361,7 +371,7 @@ sigma_mat=0
             scat(n:init_a,g+1) = (flux(n:init_a,g)*sigs_h2o(g,g+1))*del_x_m
             scat(n,g+1) = (scat(n-1,g+1) + scat(n+1,g+1))/2
             
-            RHS = (1/k*X(g+1)*S + scat(:,g+1))/gN
+            RHS = (1/k*X(g+1)*S + scat(:,g+1))
 
          end do
       end if
@@ -374,7 +384,7 @@ sigma_mat=0
       S = sum(s_mat, DIM=2)
       
       k = k_old*sum(S)/sum(S_old)
-      RHS = 1/k*X(1)*S/gN
+      RHS = 1/k*X(1)*S
 
       test = abs((k-k_old)/k)
       counter = counter + 1
@@ -424,6 +434,9 @@ sigma_mat=0
       react_new = (k2-1)/k2
       react_old = (k1-1)/k1
       W = (w_old*react_new - w_new*react_old)/(react_new - react_old)
+      if (W<=0) then
+         W = w_new/2
+      end if
    end if
 
 
@@ -443,7 +456,7 @@ end do
 do i=1,nmod
    x_step(i+n) = (i)*Wmod/(nmod-1) + x_step(n)
 end do
-!x_step = x_step*gN
+x_step = x_step*4
 
 OPEN(UNIT=1,FILE=outfile,FORM="FORMATTED",STATUS="REPLACE",ACTION="WRITE")
 do i=1,init_a
@@ -501,7 +514,7 @@ write(*,*) 'Original Width k Value= ', k_orig
 print *, ' '
 write(*,*) 'Final Multiplication Factor (k) = ', k
 write(*,*) 'Moderator Width [cm] = ', Wmod
-write(*,*) 'Half Critical Width [cm] = ', W
+write(*,*) 'Half Critical Width [cm] = ', W*4
 print *, ' '
    
 
